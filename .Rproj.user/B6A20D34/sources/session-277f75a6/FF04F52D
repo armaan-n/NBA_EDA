@@ -1,0 +1,31 @@
+{
+    "id": "FF04F52D",
+    "path": "~/school/data_science_projects/nba_time_series/main.Rmd",
+    "project_path": "main.Rmd",
+    "type": "r_markdown",
+    "hash": "0",
+    "contents": "",
+    "dirty": true,
+    "created": 1687038475844.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "281,0",
+        "scrollLine": "264",
+        "ignored_words": "Women's\n",
+        "last_setup_crc32": "277f75a6bb338d19",
+        "docOutlineVisible": "1",
+        "docOutlineSize": "162"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1687692819,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1687692961382,
+    "read_only": false,
+    "read_only_alternatives": []
+}

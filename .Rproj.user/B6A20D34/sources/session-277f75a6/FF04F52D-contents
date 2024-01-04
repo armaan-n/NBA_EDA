@@ -1,0 +1,399 @@
+---
+title: "The Evolution of Shot Taking in the NBA"
+output: html_document
+date: "2023-06-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Abbreviations
+
+NBA : National Basketball Association
+WNBA : Women's National Basketball Association
+NCAA : National Collegiate Athletics Association
+
+# 1. Motivation
+
+The tree point shot is one the most interesting phenomena in sporting history. 
+When playing basketball, if a shot is made from within the three point line,
+it counts as 2 points, however, baskets made from beyond the line are worth
+three. Its earliest introduction to a professional basketball league was in 
+1961, when the American Basketball League deemed that shots made from a distance 
+of 25 feet and greater were to be counted as three
+points [[1](https://www.usab.com/news/2014/01/history-of-the-3-pointer)]. The 
+distance of the three point line from the net has varied over time, and still 
+varies across different leagues. The official NBA three point line is 23 feet 
+and 9 inches from the center of the 
+basket [[2](https://official.nba.com/rule-no-1-court-dimensions-equipment/)], 
+where as in the NCAA and WNBA, the line is only 22 feet and 1.75 inches from the 
+basket's center [[3](https://www.wnba.com/wnba-rule-book), [4](https://www.ncaapublications.com/p-4657-2022-2023-ncaa-division-i-manual.aspx)].
+
+However, its not only the three point line itself that has evolved, but the way
+it influences the game. What was once considered a desperation play, the three
+pointer has now become a quintessential part of a team's preparation. There are 
+now teams whose coaches build teams around elite three point shooters, and are 
+willing to pay these players tens of millions of dollars each year   [[5](https://www.nba.com/warriors/news/six-players-re-signing-20170725)]. In 
+1979-80, an average of 2.8 shots per game were taken from beyond the line, 
+whereas in the 2022-23 NBA season, an average of 32.4 attempts were taken every game [[6](https://www.basketball-reference.com/leagues/NBA_stats_per_game.html)].
+
+With three point shooting becoming such a prevalent part of the NBA, fans and 
+commentators have taken notice. Some have even gone as far as to say three point 
+shooting has ruined the game, but do these claims have any weight? With this
+analysis, I aim to explore the evolution of three point shooting over the years,
+and examine how effective three point shooting really is.
+
+# 2. Background
+
+For my analysis, I'll be using a combination of NBA shot log data pulled from
+the NBA Stat API (now discontinued), which contains spatial data for all shots
+taken in the NBA from 1997 to 2020, the [NBA Database data set](https://www.kaggle.com/datasets/wyattowalsh/basketball) (found on Kaggle), 
+which contains record off all NBA games played 
+since the 1946-47 NBA season, and the [NBA Stats data set](https://www.kaggle.com/datasets/sumitrodatta/nba-aba-baa-stats?select=Player+Totals.csv)
+which was scraped from [Stathead](https://stathead.com/), and contains seasonal
+information regarding the stats of all NBA players since 1947.
+
+# 3. Methods
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(jpeg)
+library(patchwork)
+```
+
+## 3.1 Data Import and Cleaning
+
+The first data set we're going to import is the one keeping track of game
+data. Very little needs to be done in terms of preparing the data set, we 
+specify that the id columns ought to be parsed as integers (as opposed to 
+doubles), and in place of the "W"s and "L"s used to denoted wins and losses
+respectively in the win loss column, we'll parse them as logical TRUE and FALSE
+values instead.
+
+```{r}
+game_data <- read_csv(
+  "data/game.csv",
+  col_types = cols(
+    season_id = col_integer(),
+    team_id_home = col_integer(),
+    team_id_away = col_integer(),
+    game_id = col_integer(),
+  )
+)
+
+game_data <- game_data %>%
+  mutate(home_win = ifelse(wl_home == "W", TRUE, FALSE)) %>%
+  mutate(away_win = ifelse(wl_away == "W", TRUE, FALSE)) %>%
+  mutate(video_available_home = ifelse(video_available_home == 1, TRUE, FALSE)) %>%
+  mutate(video_available_away = ifelse(video_available_away == 1, TRUE, FALSE)) %>%
+  select(-c(wl_home, wl_away))
+
+game_data
+```
+
+Next, we'll perform some manipulations to transform our game data set into
+a summary of seasonal team statistics. Firstly, note that for each game, there
+are two team's statistics we have to record, the home teams' stats, and the away
+team's stats. We'll start by creating two data frames, one that groups all games
+by home team, by year and another that groups all games by away team, by year. 
+We can sum each group's numeric results to get aggregated statistics on how
+many shots, fouls, assists, etc, each team took by year. Using these aggregate
+statistics, we can compute summary statistics such as averages, counts and 
+percentages.
+
+```{r}
+# summarize each team's yearly statistics for their home and away games
+team_data_home <- game_data %>%
+  filter(year(game_date) >= 1986) %>%
+  rename(team_id = team_id_home) %>%
+  select(-contains("away"))
+
+team_data_away <- game_data %>%
+  filter(year(game_date) >= 1986) %>%
+  rename(team_id = team_id_away) %>%
+  select(-contains("home"))
+
+# remove the home and away suffixes on both data sets so their rows can be bound
+names(team_data_home) <- gsub("_home", "", names(team_data_home))
+names(team_data_away) <- gsub("_away", "", names(team_data_away))
+
+# function that determines the current NBA season based on year
+nba_season <- function (date) {
+  ifelse(
+    month(date) %in% 9:12,
+    year(date),
+    year(date) - 1
+  )
+}
+
+# bind the rows, group by team and year, and add summary statistics for each 
+# season
+team_data <- team_data_home %>%
+  bind_rows(team_data_away) %>% 
+  arrange(game_date) %>%
+  group_by(team_id, season_id) %>%
+  summarise(
+    season = nba_season(first(game_date)),
+    team_name = last(team_name), 
+    team_abbreviation = last(team_abbreviation), 
+    games_played = n(),
+    feild_goals_made = sum(fgm),
+    feild_goals_attempted = sum(fga),
+    three_pointers_made = sum(fg3m),
+    three_pointers_attempted = sum(fg3a),
+    two_pointers_attempted = feild_goals_attempted - three_pointers_attempted,
+    two_pointers_made = feild_goals_made - three_pointers_made,
+    free_throws_made = sum(ftm),
+    free_throws_attempted = sum(fta),
+    offensive_rebounds = sum(oreb),
+    deffensive_rebounds = sum(dreb),
+    rebounds = sum(dreb),
+    assits = sum(ast),
+    steals = sum(stl),
+    blocks = sum(blk),
+    turnovers = sum(tov),
+    fouls = sum(pf),
+    points = sum(pts),
+    plus_minus = sum(plus_minus)
+  )  %>%
+  mutate(
+    across(-c("team_name", "team_abbreviation", "games_played"), 
+           (function (x) x / games_played), 
+           .names = "avg_{.col}_per_game"),
+    feild_goal_percentage = feild_goals_made / feild_goals_attempted,
+    two_point_percentage = two_pointers_made / two_pointers_attempted,
+    three_point_percentage = three_pointers_made / three_pointers_attempted,
+    free_throw_percentage = free_throws_made / free_throws_attempted,
+  )
+
+team_data
+```
+
+By grouping the team data by year, we can also generate a data frame for
+league wide seasonal data.
+
+```{r}
+league_data <- team_data %>% 
+  group_by(season) %>%
+  summarise(across(-c("team_name", "team_abbreviation"), sum)) %>%
+  mutate(
+    across(
+      c("feild_goals_made", 
+        "feild_goals_attempted", 
+        "two_pointers_made",
+        "two_pointers_attempted",
+        "three_pointers_made",
+        "three_pointers_attempted",
+        "free_throws_made",
+        "free_throws_attempted",
+        "points"
+        ), 
+      (function(x) x / games_played),
+      .names = "avg_{.col}_per_game"
+    ),
+    feild_goal_percentage = feild_goals_made / feild_goals_attempted,
+    two_point_percentage = two_pointers_made / two_pointers_attempted,
+    three_point_percentage = three_pointers_made / three_pointers_attempted,
+    free_throw_percentage = free_throws_made / free_throws_attempted,
+  )
+```
+
+Finally, we'll import the player data. The only cleaning that needs to be done
+is the renaming of columns into a human readable format.
+
+```{r}
+player_stats <- read_csv("./data/player_stats.csv")
+
+player_stats <- player_stats %>%
+  rename(
+    position = pos,
+    league = lg,
+    team_name = tm,
+    games = g,
+    games_started = gs,
+    minuptes_played = mp,
+    feild_goals = fg,
+    feild_goals_attempted = fga,
+    feild_goal_percentage = fg_percent,
+    three_pointers_made = x3p,
+    three_pointers_attempted = x3pa,
+    three_point_percentage = x3p_percent,
+    two_pointers_made = x2p,
+    two_pointers_attempted = x2pa,
+    two_point_percentage = x2p_percent,
+    effective_feild_goal_percentage = e_fg_percent,
+    free_throws_made = ft,
+    free_throws_attempted = fta,
+    offensive_rebounds = orb,
+    defensive_rebounds = drb,
+    total_rebounds = trb,
+    assists = ast,
+    steals = stl,
+    blocks = blk,
+    turnovers = tov,
+    personal_fouls = pf,
+    points = pts
+    )
+```
+
+```{r}
+spatial_data <- read_csv("./data/NBA_shot_log_1997_2020.csv")
+colnames(spatial_data) <- gsub(" ", "_", colnames(spatial_data))
+```
+
+## 3.2 Exploring the Prevelance of Three Point Shooting Over Time
+
+The first step in our analysis will consist exploring how common the three point
+shot really is. We explore time series data, as well as the distribution of 
+three point shooting across the league and different players. While we can't
+draw any causal conclusions from our analysis, we hope to provide insight into
+how the three point shot has evolved over time, possible explanations as to why
+it has become so prevalent in modern basketball, and points of interest in the 
+history of the three point shot.
+
+### 3.2.1 Increase in Three Point Shooting Over the Years
+
+First, let's examine the average number of three pointers taken per game.
+
+```{r}
+league_data %>%
+  ggplot(aes(x = season, y = three_pointers_attempted / games_played)) +
+  geom_point()
+```
+
+```{r}
+img <- readJPEG("./data/nba_court.jpg", native = TRUE)
+
+graph <- spatial_data %>%
+  filter(Game_ID == 0029700427) %>%
+  ggplot(aes(x = X_Location, y = Y_Location)) +
+  geom_point()
+
+img_graph <- graph +                  
+  inset_element(p = img,
+                left = 250,
+                bottom = -52,
+                right = -250,
+                top = 418)
+
+img_graph
+```
+
+
+### 3.2.2 Reducing The Three Point Range
+
+The plot below is a time series graph that depicts how the ratio of three 
+pointers to two pointers has evolved over the seasons.
+
+```{r}
+league_data %>%
+  ggplot(aes(x = season, y = three_pointers_attempted / two_pointers_attempted)) +
+  geom_point() +
+  geom_point(aes(color = "Implemented"), 
+             fill = "black", 
+             shape = 21, 
+             stroke = 2, 
+             data = filter(league_data, season == 1994)) +
+  geom_point(aes(color = "Retracted"), 
+             fill = "black", 
+             shape = 21, 
+             stroke = 2, 
+             data = filter(league_data, season == 1997)) +
+  scale_color_manual(name = "Three Point Range Reduction",
+                       breaks = c("Implemented", "Retracted"),
+                       values = c("Implemented" = "red", "Retracted" = "blue")) +
+  xlab("Season") +
+  ylab("Three Pointer to Two Pointer Ratio") +
+  ggtitle("Three to Two Point Attempt Ratio Over the Seasons") +
+  theme(legend.position = "bottom")
+```
+
+There's clearly been a steady increase in three point shooting over the history
+of the NBA, however, there are some points of interest in the graph above.
+
+Firstly, note the large jump in the three to two pointer ratio between the 1993 
+and 1994 season, it went from 0.13 to 0.23. After some investigation, it turns 
+out that in 1994, the NBA implemented an interesting rule change. If we create 
+plot of the league's average points per game, we can see that preceding 1994, 
+the average number of points per game had been declining steadily year over 
+year. 
+
+```{r}
+league_data %>%
+  ggplot(aes(x = season, y = points / games_played)) +
+  geom_point() +
+  geom_smooth(data = filter(league_data, season < 1994), method = "lm", se = FALSE) +
+  geom_smooth(data = filter(league_data, 1994 <= season & season <= 1996), method = "lm", se = FALSE) +
+  geom_point(data = filter(league_data, 1994 <= season & season <= 1996), mapping = aes(color = "Seasons with 22 ft three point line")) +
+  ylab("Average Points Per Game") +
+  xlab("Season") +
+  scale_color_manual(name = "",
+                     breaks = c("Seasons with 22 ft three point line"),
+                     values = c("red")) +
+  theme(legend.position = "bottom") +
+  ggtitle("Average Points Per Game Over The Seasons")
+```
+
+During the 1994 season, the NBA implemented a rule change that would reduce the 
+distance of the three point point line from 23 feet and 9 inches, down to an 
+even 22 feet. This was their attempt to increase the amount of scoring that
+happened per game. While the policy did increase the rate at which teams shot 
+three pointers, as shown in *Fig 1*, the average number of points per game 
+continued to decline. In fact, if we fit a linear regression to the points prior
+to the policy change, and another one while the policy change was in place, we
+see that the average points per game were declining even faster than they had 
+been without the rule change (*Fig 2*).
+
+
+
+```{r}
+lm(points / games_played ~ season, filter(league_data, season < 1994))
+```
+
+```{r}
+lm(points / games_played ~ season, filter(league_data, 1994 <= season & season <= 1996))
+```
+
+$$
+Y_{\text{Pre Policy}} = 1967.0862  -0.9353X \\
+Y_{\text{During Policy}} = 4591.442  -2.252X 
+$$
+
+While the intercept is rather meaningless, these regressions tell us that prior
+to the policy change, the average number of points per game was falling at a 
+rate of about 0.94 points per season, where as after the during the period in 
+which the policy was active, it was falling at a rate of 2.25 points per season.
+
+After three years, the league reverted their decision, which coincides with a 
+sudden drop in three point shooting in 1997.
+
+### 3.2.3 Rise in the Growth Rate of Three Point Shooting
+
+Turning our attention back to *Fig 1*, there is another noteworthy feature. 
+After 2012, the rate at which three point shoots have been growing year over 
+year explodes. This is made clear when we plot a time series showing the change 
+in the three to two pointer ratio.
+
+```{r}
+league_data %>%
+  mutate(delta_tpr = three_pointers_attempted / two_pointers_attempted - 
+           lag(three_pointers_attempted) / lag(two_pointers_attempted)) %>%
+  ggplot(aes(season, delta_tpr)) +
+  geom_bar(stat = "identity")
+```
+
+```{r}
+team_data %>%
+  filter(season == 2011 | season == 2012) %>%
+  ggplot(aes(three_pointers_attempted / two_pointers_attempted - lag(three_pointers_attempted / two_pointers_attempted))) +
+  geom_histogram() +
+  facet_wrap(~ season, nrow=2)
+```
+
+
+
+## 3.3 The Efficacy Of Three Point Shooting
+
+# 4. Conclusion

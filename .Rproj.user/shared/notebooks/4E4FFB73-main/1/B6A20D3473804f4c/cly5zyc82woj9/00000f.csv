@@ -1,0 +1,5 @@
+"0","league_data %>%"
+"0","  mutate(delta_tpr = three_pointers_attempted / two_pointers_attempted - "
+"0","           lag(three_pointers_attempted) / lag(two_pointers_attempted)) %>%"
+"0","  ggplot(aes(season, delta_tpr)) +"
+"0","  geom_bar(stat = ""identity"")"

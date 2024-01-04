@@ -1,0 +1,23 @@
+"0","lm(points / games_played ~ season, filter(league_data, season < 1994))"
+"1","
+Call:
+"
+"1",""
+"1","lm(formula = points/games_played ~ season, data = filter(league_data, 
+    season < 1994))"
+"1",""
+"1","
+
+"
+"1","Coefficients:
+"
+"1","(Intercept)  "
+"1","     season  "
+"1","
+"
+"1","  1967.0862  "
+"1","    -0.9353  "
+"1","
+"
+"1","
+"

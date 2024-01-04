@@ -1,0 +1,10 @@
+"0","spatial_data <- read_csv(""./data/NBA_shot_log_1997_2020.csv"")"
+"2","[1mRows: [22m[34m4729512[39m [1mColumns: [22m[34m22[39m"
+"2","[36m──[39m [1mColumn specification[22m [36m──────────────────────────────────────────────────────────────[39m
+[1mDelimiter:[22m "",""
+[31mchr[39m (11): Game ID, Player Name, Team Name, Action Type, Shot Type, Shot Zone Basic...
+[32mdbl[39m (11): Game Event ID, Player ID, Team ID, Period, Minutes Remaining, Seconds Re..."
+"2","
+[36mℹ[39m Use `spec()` to retrieve the full column specification for this data.
+[36mℹ[39m Specify the column types or set `show_col_types = FALSE` to quiet this message."
+"0","colnames(spatial_data) <- gsub("" "", ""_"", colnames(spatial_data))"
